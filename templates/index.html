@@ -1,46 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Streaming with Motion Detection</title>
+    <title>Comparación de Técnicas de Mejora</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        .label {
+            font-weight: bold;
+        }
+
+        .video-container {
+            grid-column: span 4;
+        }
+
+        img {
+            border: 3px solid #444;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 100%;
+        }
+    </style>
 </head>
 <body>
-    <h1>Video Streaming with Motion Detection</h1>
-    <img src="{{ url_for('video_stream') }}" alt="Video Stream">
-
-    <h2>Ajustes de Ruido</h2>
-    <form id="noiseForm">
-        <label for="gaussian_mean">Media Gaussiana:</label>
-        <input type="range" id="gaussian_mean" name="gaussian_mean" min="-100" max="100" value="0"><br>
-
-        <label for="gaussian_sigma">Desviación Estándar Gaussiana:</label>
-        <input type="range" id="gaussian_sigma" name="gaussian_sigma" min="0" max="100" value="25"><br>
-
-        <label for="speckle_variance">Varianza Speckle:</label>
-        <input type="range" id="speckle_variance" name="speckle_variance" min="0" max="1" step="0.01" value="0.1"><br>
-
-        <button type="button" onclick="updateNoiseParams()">Update Parameters</button>
-    </form>
-
-    <script>
-        function updateNoiseParams() {
-            const form = document.getElementById('noiseForm');
-            const formData = new FormData(form);
-
-            fetch('/set_noise_params', {
-                method: 'POST',
-                body: new URLSearchParams(formData)
-            }).then(response => {
-                if (response.ok) {
-                    response.json().then(data => {
-                        alert(data.message); // Muestra mensaje de confirmación
-                    });
-                } else {
-                    alert('Error al actualizar parámetros.');
-                }
-            });
-        }
-    </script>
+    <h1>Comparación de Técnicas de Mejora de Imágenes</h1>
+    
+    <div class="container">
+        <div class="label">Original</div>
+        <div class="label">Ecualización</div>
+        <div class="label">CLAHE</div>
+        <div class="label">Filtro Bilateral</div>
+        
+        <div class="video-container">
+            <img src="{{ url_for('video_feed') }}" alt="Video Procesado">
+        </div>
+    </div>
 </body>
 </html>
