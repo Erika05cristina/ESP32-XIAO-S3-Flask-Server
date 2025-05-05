@@ -1,0 +1,8 @@
+# Ignorar todos los archivos .pyc
+*.pyc
+
+# Ignorar todos los archivos compilados de Python (más general)
+__pycache__/
+*.py[cod]
+
+venv

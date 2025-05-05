@@ -1,72 +1,122 @@
-
-# Author: vlarobbyk
-# Version: 1.0
-# Date: 2024-10-20
-# Description: A simple example to process video captured by the ESP32-XIAO-S3 or ESP32-CAM-MB in Flask.
-
-
-from flask import Flask, render_template, Response, stream_with_context, Request
-from io import BytesIO
-
+from flask import Flask, render_template, Response, request, jsonify
 import cv2
 import numpy as np
-import requests
+import time
 
 app = Flask(__name__)
-# IP Address
-_URL = 'http://10.0.0.3'
-# Default Streaming Port
-_PORT = '81'
-# Default streaming route
-_ST = '/stream'
-SEP = ':'
 
-stream_url = ''.join([_URL,SEP,_PORT,_ST])
+# Modelo de substracción adaptativa de fondo
+backSub = cv2.createBackgroundSubtractorMOG2()
 
+# Parámetros globales para ruido
+gaussian_mean = 0
+gaussian_sigma = 25
+speckle_variance = 0.1
+
+def add_gaussian_noise(image, mean, sigma):
+    row, col, ch = image.shape
+    gauss = np.random.normal(mean, sigma, (row, col, ch))
+    noisy_image = image + gauss
+    return np.clip(noisy_image, 0, 255).astype(np.uint8)
+
+def add_speckle_noise(image, variance):
+    row, col, ch = image.shape
+    gauss = np.random.randn(row, col, ch)
+    noisy_image = image + image * gauss * variance
+    return np.clip(noisy_image, 0, 255).astype(np.uint8)
+
+def adjust_gamma(image, gamma=1.0):
+    # Construye una tabla de mapeo para realizar la corrección gamma
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    # Aplica la corrección gamma usando la tabla de mapeo
+    return cv2.LUT(image, table)
 
 def video_capture():
-    res = requests.get(stream_url, stream=True)
-    for chunk in res.iter_content(chunk_size=100000):
+    cap = cv2.VideoCapture(0)   
+    if not cap.isOpened():
+        raise RuntimeError("No se pudo abrir la cámara.")
 
-        if len(chunk) > 100:
-            try:
-                img_data = BytesIO(chunk)
-                cv_img = cv2.imdecode(np.frombuffer(img_data.read(), np.uint8), 1)
-                gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-                N = 537
-                height, width = gray.shape
-                noise = np.full((height, width), 0, dtype=np.uint8)
-                random_positions = (np.random.randint(0, height, N), np.random.randint(0, width, N))
-                
-                noise[random_positions[0], random_positions[1]] = 255
+    prev_frame_time = 0
 
-                noise_image = cv2.bitwise_or(gray, noise)
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: No se pudo leer el frame.")
+                break
 
-                total_image = np.zeros((height, width * 2), dtype=np.uint8)
-                total_image[:, :width] = gray
-                total_image[:, width:] = noise_image
+            # Aplicar ruido gaussiano
+            frame = add_gaussian_noise(frame, gaussian_mean, gaussian_sigma)
 
-                (flag, encodedImage) = cv2.imencode(".jpg", total_image)
-                if not flag:
-                    continue
+            # Aplicar ruido speckle
+            frame = add_speckle_noise(frame, speckle_variance)
 
-                yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
-                bytearray(encodedImage) + b'\r\n')
+            # Calcular FPS
+            new_frame_time = time.time()
+            fps = 1 / (new_frame_time - prev_frame_time)
+            prev_frame_time = new_frame_time
 
-            except Exception as e:
-                print(e)
+            # Aplicar substracción de fondo
+            fgMask = backSub.apply(frame)
+
+            # Mejorar iluminación con CLAHE
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            clahe_img = clahe.apply(gray)
+
+            # Generar máscara de movimiento
+            _, mask = cv2.threshold(fgMask, 200, 255, cv2.THRESH_BINARY)
+            result = cv2.bitwise_and(frame, frame, mask=mask)
+
+            # Ajustar exposición con Gamma Correction
+            gamma_corrected = adjust_gamma(frame, gamma=1.5)
+
+            # Agregar texto (FPS)
+            cv2.putText(frame, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(clahe_img, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(result, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(gamma_corrected, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+            # Combinar resultados en una sola imagen
+            combined = np.hstack((
+                frame,
+                cv2.cvtColor(clahe_img, cv2.COLOR_GRAY2BGR),
+                result,
+                gamma_corrected
+            ))
+
+            # Codificar el frame para transmisión
+            (flag, encodedImage) = cv2.imencode(".jpg", combined)
+            if not flag:
                 continue
+
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
+
+    finally:
+        cap.release()   
+        print("Cámara liberada.")
 
 @app.route("/")
 def index():
+    print("Cargando página principal...")
     return render_template("index.html")
-
 
 @app.route("/video_stream")
 def video_stream():
-    return Response(video_capture(),
-                    mimetype="multipart/x-mixed-replace; boundary=frame")
+    print("Iniciando transmisión de vídeo...")
+    return Response(video_capture(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+@app.route("/set_noise_params", methods=["POST"])
+def set_noise_params():
+    global gaussian_mean, gaussian_sigma, speckle_variance
+    gaussian_mean = float(request.form.get("gaussian_mean", 0))
+    gaussian_sigma = float(request.form.get("gaussian_sigma", 25))
+    speckle_variance = float(request.form.get("speckle_variance", 0.1))
+    print("Parámetros de ruido actualizados.")
+    return jsonify({"message": "Noise parameters updated successfully."})
 
 if __name__ == "__main__":
+    print("Iniciando servidor Flask...")
     app.run(debug=False)
-
