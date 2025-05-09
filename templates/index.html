@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comparación de Técnicas de Mejora</title>
+    <title>Comparación de Técnicas de Mejora de Imagen </title>
     <style>
         body {
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 20px;
             background-color: #f0f0f0;
+        }
+
+        h1 {
+            margin-bottom: 20px;
         }
 
         .container {
@@ -22,6 +26,7 @@
 
         .label {
             font-weight: bold;
+            margin-bottom: 10px;
         }
 
         .video-container {
@@ -34,20 +39,30 @@
             width: 100%;
             max-width: 100%;
         }
+
+        .motion-link {
+            margin-top: 20px;
+            display: block;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <h1>Comparación de Técnicas de Mejora de Imágenes</h1>
-    
+
     <div class="container">
         <div class="label">Original</div>
         <div class="label">Ecualización</div>
         <div class="label">CLAHE</div>
         <div class="label">Filtro Bilateral</div>
-        
+
         <div class="video-container">
             <img src="{{ url_for('video_feed') }}" alt="Video Procesado">
         </div>
     </div>
+
+    <a href="{{ url_for('motion_page') }}" class="motion-link">Ver solo movimiento</a>
+    <a href="{{ url_for('noise_filter_page') }}" class="motion-link">Ruido</a>
+
 </body>
 </html>

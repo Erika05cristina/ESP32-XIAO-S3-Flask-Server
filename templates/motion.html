@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detección de Movimiento</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .motion-container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        img {
+            border: 3px solid #444;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .back-link {
+            margin-top: 20px;
+            display: block;
+            font-weight: bold;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .form-container {
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .form-container select, 
+        .form-container button {
+            font-size: 16px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .form-container h2 {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Solo Movimiento</h1>
+
+    <div class="motion-container">
+        <img src="{{ url_for('motion_feed') }}" alt="Video Movimiento">
+    </div>
+
+    <div class="form-container">
+        <h2>Selecciona la operación Bitwise:</h2>
+        <form method="POST" action="{{ url_for('set_operation') }}">
+            <select name="operation" id="operation">
+                <option value="and">AND</option>
+                <option value="or">OR</option>
+                <option value="xor">XOR</option>
+            </select>
+            <br>
+            <button type="submit">Aplicar Operación</button>
+        </form>
+    </div>
+
+    <a href="{{ url_for('index') }}" class="back-link">Volver a la página principal</a>
+
+    <script>
+        document.getElementById("operation").addEventListener("change", function () {
+            const form = new FormData();
+            form.append("operation", this.value);
+
+            fetch("{{ url_for('set_operation') }}", {
+                method: "POST",
+                body: form
+            }).then(response => {
+                console.log("Operación enviada:", this.value);
+            });
+        });
+    </script>
+</body>
+</html>
