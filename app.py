@@ -24,23 +24,17 @@ def add_label(image, text):
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.5
     thickness = 1
-    color = (0, 255, 0)  # Verde
+    color = (0, 255, 0)
 
-    # Agregar texto centrado
     (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
     x = (image.shape[1] - text_width) // 2
-    y = 20  # Altura del texto
+    y = 20 
 
     cv2.putText(image, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
     return image
 
 def apply_noise_and_filters():
-    # Camara computadora
-    # cap = cv2.VideoCapture(0) 
-    # Camara esp32
     cap = cv2.VideoCapture(stream_url)
-    prev_frame_time = 0
-
     if not cap.isOpened():
         return
 
@@ -67,19 +61,29 @@ def apply_noise_and_filters():
         filtered_blur = cv2.blur(noisy_gauss, (5, 5))
         filtered_gaussian = cv2.GaussianBlur(noisy_gauss, (5, 5), 0)
 
-        # Detección de bordes
-        canny_edges = cv2.Canny(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), 100, 200)
-        sobel_x = cv2.Sobel(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 1, 0, ksize=3)
-        sobel_y = cv2.Sobel(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 0, 1, ksize=3)
-        sobel_edges = cv2.magnitude(sobel_x, sobel_y)
-        sobel_edges = cv2.normalize(sobel_edges, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        # Detección de bordes sin filtro (directo sobre ruido)
+        canny_raw = cv2.Canny(cv2.cvtColor(noisy_gauss, cv2.COLOR_BGR2GRAY), 100, 200)
+
+        sobel_x_raw = cv2.Sobel(cv2.cvtColor(noisy_gauss, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 1, 0, ksize=3)
+        sobel_y_raw = cv2.Sobel(cv2.cvtColor(noisy_gauss, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 0, 1, ksize=3)
+        sobel_raw = cv2.magnitude(sobel_x_raw, sobel_y_raw)
+        sobel_raw = cv2.normalize(sobel_raw, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+        # Detección de bordes con filtro (sobre imagen filtrada)
+        canny_filtered = cv2.Canny(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), 100, 200)
+
+        sobel_x_f = cv2.Sobel(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 1, 0, ksize=3)
+        sobel_y_f = cv2.Sobel(cv2.cvtColor(filtered_gaussian, cv2.COLOR_BGR2GRAY), cv2.CV_64F, 0, 1, ksize=3)
+        sobel_filtered = cv2.magnitude(sobel_x_f, sobel_y_f)
+        sobel_filtered = cv2.normalize(sobel_filtered, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
         # Convertir a 3 canales para combinar
-        canny_edges = cv2.cvtColor(canny_edges, cv2.COLOR_GRAY2BGR)
-        sobel_edges = cv2.cvtColor(sobel_edges, cv2.COLOR_GRAY2BGR)
+        canny_raw = cv2.cvtColor(canny_raw, cv2.COLOR_GRAY2BGR)
+        sobel_raw = cv2.cvtColor(sobel_raw, cv2.COLOR_GRAY2BGR)
+        canny_filtered = cv2.cvtColor(canny_filtered, cv2.COLOR_GRAY2BGR)
+        sobel_filtered = cv2.cvtColor(sobel_filtered, cv2.COLOR_GRAY2BGR)
 
-        # Combinar imágenes
-        # Añadir etiquetas a cada imagen
+        # Etiquetas
         add_label(original, "Original")
         add_label(noisy_gauss, "Ruido Gaussiano")
         add_label(noisy_speckle, "Ruido Speckle")
@@ -88,15 +92,18 @@ def apply_noise_and_filters():
         add_label(filtered_blur, "Filtro Blur")
         add_label(filtered_gaussian, "Filtro Gaussiano")
 
-        add_label(canny_edges, "Canny")
-        add_label(sobel_edges, "Sobel")
+        add_label(canny_raw, "Canny (sin filtro)")
+        add_label(canny_filtered, "Canny (con filtro)")
+        add_label(sobel_raw, "Sobel (sin filtro)")
+        add_label(sobel_filtered, "Sobel (con filtro)")
 
-        # Combinar con etiquetas
+        # Combinar imágenes en filas
         row1 = np.hstack((original, noisy_gauss, noisy_speckle))
         row2 = np.hstack((filtered_median, filtered_blur, filtered_gaussian))
-        row3 = np.hstack((canny_edges, sobel_edges, np.zeros_like(original)))
+        row3 = np.hstack((canny_raw, canny_filtered, np.zeros_like(original)))
+        row4 = np.hstack((sobel_raw, sobel_filtered, np.zeros_like(original)))
 
-        combined = np.vstack((row1, row2, row3))
+        combined = np.vstack((row1, row2, row3, row4))   
 
         _, buffer = cv2.imencode('.jpg', combined)
         frame_bytes = buffer.tobytes()
@@ -108,7 +115,8 @@ def apply_noise_and_filters():
 
 def motion():
     # Camara computadora
-    # cap = cv2.VideoCapture(0) 
+    # cap = cv2.VideoCapture(0)
+
     # Camara esp32
     cap = cv2.VideoCapture(stream_url)
     prev_frame_time = 0
@@ -183,6 +191,7 @@ def process_and_stack(frame):
 def video_stream():
     # Camara computadora
     # cap = cv2.VideoCapture(0) 
+
     # Camara esp32
     cap = cv2.VideoCapture(stream_url)
     prev_frame_time = 0
@@ -204,7 +213,6 @@ def video_stream():
 
             processed_frame = process_and_stack(frame)
 
-            # Mostrar FPS (opcional)
             cv2.putText(processed_frame, f'FPS: {fps:.2f}', (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
